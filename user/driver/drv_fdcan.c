@@ -8,18 +8,10 @@
 
 #include "drv_fdcan.h"
 
-#include "fdcan.h"
-
 fdcan_manage_object_struct fdcan1_manage_object = {0};
 fdcan_manage_object_struct fdcan2_manage_object = {0};
 fdcan_manage_object_struct fdcan3_manage_object = {0};
-
 uint8_t CAN_Supercap_Tx_Data[8];
-
-
-
-
-
 
 /**
  * @brief 根据句柄反查对象
@@ -92,7 +84,6 @@ HAL_StatusTypeDef fdcan_filter_config(FDCAN_HandleTypeDef *hfdcan,
  return HAL_FDCAN_ConfigFilter(hfdcan, &filter_init);
 }
 
-
 /**
  * @brief 初始化 FDCAN 管理对象并启动外设
  */
@@ -157,7 +148,6 @@ uint8_t fdcan_send_classic_data(fdcan_manage_object_struct *obj, const uint16_t 
  */
 static inline void fdcan_rx_dispatcher(fdcan_manage_object_struct *obj, uint32_t rx_fifo)
 {
- // 从指定的硬件 FIFO 读取报文
  if (HAL_FDCAN_GetRxMessage(obj->can_handler, rx_fifo, &obj->rx_buffer.header, obj->rx_buffer.data) == HAL_OK)
  {
   if (obj->fdcan_callback != NULL)

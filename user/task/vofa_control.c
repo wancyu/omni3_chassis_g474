@@ -9,25 +9,33 @@
 #include "cmsis_os2.h"
 #include "dvc_vofa.h"
 #include "chassis_control.h"
-#include "Control_slave.h"
-
-
-
-
+#include "dvc_lidar.h"
 vofa_struct vofa_debug;
 
-// 1. 实体定义全局变量
-volatile float    g_vofa_vx = 0.0f;
-volatile float    g_vofa_vy = 0.0f;
-volatile float    g_vofa_vw = 0.0f;
-volatile uint32_t g_vofa_last_time = 0;
+// static float vofa_motor0_target_omega;
+// static float vofa_motor0_now_omega;
+// static float vofa_motor1_target_omega;
+// static float vofa_motor1_now_omega;
+// static float vofa_motor2_target_omega;
+// static float vofa_motor2_now_omega;
+static float vofa_chassis_target_speed_x;
+static float vofa_chassis_target_speed_y;
+static float vofa_chassis_target_speed_w;
 
-static float vofa_motor0_target_omega;
-static float vofa_motor0_now_omega;
-static float vofa_motor1_target_omega;
-static float vofa_motor1_now_omega;
-static float vofa_motor2_target_omega;
-static float vofa_motor2_now_omega;
+
+
+vofa_cmd_struct vofa_cmd = {
+    .speed = {0.0f, 0.0f, 0.0f},
+    .target_pose = {0.0f, 0.0f, 0.0f},
+    .last_update_time = 0,
+    .is_new_cmd = 0
+};
+
+static float world_x;
+static float world_y;
+static float world_w;
+
+
 
 const char *vofa_cmd_list[] = {
     "motor_id",   // 0
@@ -38,33 +46,57 @@ const char *vofa_cmd_list[] = {
     "target_deg", // 5
     "chassis_speed",  //6
     "ctrl_mode",   //7
+    "chassis_pose", //8
+    "reset_pose"   //9
 };
 void uart_callback_function(uint8_t *Buffer, uint16_t Length)
 {
-
-    // HAL_GPIO_WritePin(GPIOE, GPIO_PIN_13, GPIO_PIN_RESET);
-
     if (Buffer == NULL || Length == 0) return;
     Buffer[Length] = '\0';
-    const char *prefix = "chassis_speed=";
-    const size_t prefix_len = 14; // strlen("chassis_speed=")
 
-    // 检查开头是否为 "chassis_rpm="
-    if (Length > prefix_len && strncmp((char *)Buffer, prefix, prefix_len) == 0)
+    /* ================= 1. 解析 chassis_speed=vx,vy,vw# ================= */
+    const char *prefix_speed = "chassis_speed=";
+    const size_t prefix_speed_len = 14; // strlen("chassis_speed=")
+
+    if (Length > prefix_speed_len && strncmp((char *)Buffer, prefix_speed, prefix_speed_len) == 0)
     {
         float vx = 0.0f;
         float vy = 0.0f;
+        float vw = 0.0f;
         char end_char = 0;
 
-        // 2. 从等号后面硬解析两个数字（逗号分隔，兼容负号与小数）
-        if (sscanf((char *)Buffer + prefix_len, "%f,%f%c", &vx, &vy, &end_char) == 3 && end_char == '#')
+        // 解析 3 个浮点数（vx, vy, vw），末尾匹配 '#'
+        if (sscanf((char *)Buffer + prefix_speed_len, "%f,%f,%f%c", &vx, &vy, &vw, &end_char) == 4 && end_char == '#')
         {
-            // === 匹配成功！执行你的底盘控制逻辑 ===
-            // 将 RPM 转换为底盘速度 m/ ,直接存入全局变量
-            g_vofa_vx = vx;
-            g_vofa_vy = vy;
-            g_vofa_vw = 0.0f;
-            g_vofa_last_time = osKernelGetTickCount(); // 刷新时间戳
+            vofa_cmd.speed.vx = vx;
+            vofa_cmd.speed.vy = vy;
+            vofa_cmd.speed.vw = vw;
+            vofa_cmd.last_update_time = osKernelGetTickCount(); // 刷新时间戳
+            vofa_cmd.is_new_cmd = 1;
+
+            return;
+        }
+    }
+
+    /* ================= 2. 解析 chassis_pose=x,y,yaw# ================= */
+    const char *prefix_pose = "chassis_pose=";
+    const size_t prefix_pose_len = 13; // strlen("chassis_pose=")
+
+    if (Length > prefix_pose_len && strncmp((char *)Buffer, prefix_pose, prefix_pose_len) == 0)
+    {
+        float x   = 0.0f;
+        float y   = 0.0f;
+        float yaw = 0.0f;
+        char end_char = 0;
+
+        // 解析 3 个浮点数（x, y, yaw），末尾匹配 '#'
+        if (sscanf((char *)Buffer + prefix_pose_len, "%f,%f,%f%c", &x, &y, &yaw, &end_char) == 4 && end_char == '#')
+        {
+            vofa_cmd.target_pose.x   = x;
+            vofa_cmd.target_pose.y   = y;
+            vofa_cmd.target_pose.yaw = yaw;
+            vofa_cmd.last_update_time = osKernelGetTickCount(); // 刷新时间戳
+            vofa_cmd.is_new_cmd = 1;
 
             return;
         }
@@ -79,14 +111,24 @@ void uart_callback_function(uint8_t *Buffer, uint16_t Length)
     if (cmd_index == 7) // 收到 ctrl_mode 切换指令
     {
         uint8_t mode = (uint8_t)cmd_value;
-        if (mode <= 2)
+        if (mode <= 4)
         {
 
             g_chassis_ctrl_mode = (chassis_control_mode_enum)mode;
-            // 模式切换时底盘先安全刹停，防止上个模式的速度残留
-            chassis_set_target_speed(&chassis, 0.0f, 0.0f, 0.0f);
+            chassis_stop(&chassis);
         }
         return;
+    }
+    if (cmd_index == 9)
+    {
+        uint8_t mode = (uint8_t)cmd_value;
+        if (mode == 1)
+        {
+            lidar_recalibrate(); // 触发重新零位标定
+            chassis_stop(&chassis);      // 安全停车
+
+        }
+
     }
 
 }
@@ -99,9 +141,8 @@ void vofa_task(void *argument)
   vofa_init(&vofa_debug, &uart1_manage_object, (sizeof(vofa_cmd_list) / sizeof(char *)), vofa_cmd_list, 0x7F800000);
 
 
-  vofa_set_data(&vofa_debug, 6, &vofa_motor0_target_omega, &vofa_motor0_now_omega,
-                                       &vofa_motor1_target_omega ,&vofa_motor1_now_omega,
-                                       &vofa_motor2_target_omega ,&vofa_motor2_now_omega
+  vofa_set_data(&vofa_debug, 6, &world_x ,&world_y, &world_w,
+                                       &vofa_chassis_target_speed_x ,&vofa_chassis_target_speed_y, &vofa_chassis_target_speed_w
                                        );
 
 
@@ -112,12 +153,19 @@ void vofa_task(void *argument)
       osDelayUntil(tick_count);
 
 
-      vofa_motor0_target_omega = RADPS_TO_RPM * chassis.motors[0].target_omega;
-      vofa_motor0_now_omega    = RADPS_TO_RPM * chassis.motors[0].now_omega;
-      vofa_motor1_target_omega = RADPS_TO_RPM * chassis.motors[1].target_omega;
-      vofa_motor1_now_omega    = RADPS_TO_RPM * chassis.motors[1].now_omega;
-      vofa_motor2_target_omega = RADPS_TO_RPM * chassis.motors[2].target_omega;
-      vofa_motor2_now_omega    = RADPS_TO_RPM * chassis.motors[2].now_omega;
+      // vofa_motor0_target_omega = RADPS_TO_RPM * chassis.motors[0].target_omega;
+      // vofa_motor0_now_omega    = RADPS_TO_RPM * chassis.motors[0].now_omega;
+      // vofa_motor1_target_omega = RADPS_TO_RPM * chassis.motors[1].target_omega;
+      // vofa_motor1_now_omega    = RADPS_TO_RPM * chassis.motors[1].now_omega;
+      // vofa_motor2_target_omega = RADPS_TO_RPM * chassis.motors[2].target_omega;
+      // vofa_motor2_now_omega    = RADPS_TO_RPM * chassis.motors[2].now_omega;
+      world_x = chassis.world_x;
+      world_y = chassis.world_y;
+      world_w = chassis.world_w;
+      vofa_chassis_target_speed_x = chassis.target_speed_x;
+      vofa_chassis_target_speed_y = chassis.target_speed_y;
+      vofa_chassis_target_speed_w = chassis.target_speed_w;
+
       // 调用发送函数
       vofa_update_and_send(&vofa_debug);
   }

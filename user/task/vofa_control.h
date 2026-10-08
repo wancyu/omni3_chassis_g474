@@ -3,13 +3,31 @@
 
 #include <stdint.h>
 
-// VOFA 接收到的全局目标速度 (m/s, rad/s) 与心跳时间戳
-extern volatile float    g_vofa_vx;
-extern volatile float    g_vofa_vy;
-extern volatile float    g_vofa_vw;
-extern volatile uint32_t g_vofa_last_time;
+/**
+ * @brief VOFA 接收指令聚合结构体
+ */
+typedef struct {
+    /* 速度控制指令 (m/s, rad/s) */
+    struct {
+        float vx;
+        float vy;
+        float vw;
+    } speed;
 
+    /* 世界坐标系位置控制指令 (m, rad) */
+    struct {
+        float x;
+        float y;
+        float yaw;
+    } target_pose;
 
+    /* 状态与时间戳 */
+    volatile uint32_t last_update_time; // 上次成功更新数据的时间戳 (ms)
+    volatile uint8_t  is_new_cmd;        // 是否有新指令标志 (1: 有新指令, 0: 已读取)
+} vofa_cmd_struct;
+
+/* 全局变量声明 */
+extern vofa_cmd_struct vofa_cmd;
 // 提供给 CubeMX 自动 extern 的任务入口
 void vofa_task(void *argument);
 

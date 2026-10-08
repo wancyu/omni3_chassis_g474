@@ -35,8 +35,6 @@ extern fdcan_manage_object_struct fdcan3_manage_object;
 
 extern uint8_t CAN_Supercap_Tx_Data[];
 
-
-/* ================== º¯ÊýÉùÃ÷ ================== */
 HAL_StatusTypeDef fdcan_filter_config(FDCAN_HandleTypeDef *hfdcan,
                                       uint32_t filter_index,
                                       uint32_t id_type,
