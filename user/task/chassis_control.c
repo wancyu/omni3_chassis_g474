@@ -10,7 +10,7 @@
 
 chassis_struct chassis;
 
-volatile chassis_control_mode_enum g_chassis_ctrl_mode = CHASSIS_MODE_RC_SPEED;
+volatile chassis_control_mode_enum g_chassis_ctrl_mode = CHASSIS_MODE_VOFA_SPEED;
 volatile chassis_pos_source_enum   g_chassis_pos_source = POS_SOURCE_ODOM_ONLY;
 
 /**

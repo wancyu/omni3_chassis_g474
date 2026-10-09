@@ -12,16 +12,18 @@
 #include "dvc_lidar.h"
 vofa_struct vofa_debug;
 
-// static float vofa_motor0_target_omega;
-// static float vofa_motor0_now_omega;
-// static float vofa_motor1_target_omega;
-// static float vofa_motor1_now_omega;
-// static float vofa_motor2_target_omega;
-// static float vofa_motor2_now_omega;
+static float vofa_motor0_target_omega;
+static float vofa_motor0_now_omega;
+static float vofa_motor1_target_omega;
+static float vofa_motor1_now_omega;
+static float vofa_motor2_target_omega;
+static float vofa_motor2_now_omega;
 static float vofa_chassis_target_speed_x;
 static float vofa_chassis_target_speed_y;
 static float vofa_chassis_target_speed_w;
-
+static float vofa_buffer1;
+static float vofa_buffer2;
+static float vofa_buffer3;
 
 
 vofa_cmd_struct vofa_cmd = {
@@ -141,8 +143,9 @@ void vofa_task(void *argument)
   vofa_init(&vofa_debug, &uart1_manage_object, (sizeof(vofa_cmd_list) / sizeof(char *)), vofa_cmd_list, 0x7F800000);
 
 
-  vofa_set_data(&vofa_debug, 6, &world_x ,&world_y, &world_w,
-                                       &vofa_chassis_target_speed_x ,&vofa_chassis_target_speed_y, &vofa_chassis_target_speed_w
+  vofa_set_data(&vofa_debug, 9, &vofa_motor0_target_omega ,&vofa_motor0_now_omega, &world_x,
+                                       &vofa_buffer1 ,&vofa_buffer2, &world_y,
+                                       &vofa_motor2_target_omega ,&vofa_motor2_now_omega, &world_w
                                        );
 
 
@@ -153,15 +156,19 @@ void vofa_task(void *argument)
       osDelayUntil(tick_count);
 
 
-      // vofa_motor0_target_omega = RADPS_TO_RPM * chassis.motors[0].target_omega;
-      // vofa_motor0_now_omega    = RADPS_TO_RPM * chassis.motors[0].now_omega;
-      // vofa_motor1_target_omega = RADPS_TO_RPM * chassis.motors[1].target_omega;
-      // vofa_motor1_now_omega    = RADPS_TO_RPM * chassis.motors[1].now_omega;
-      // vofa_motor2_target_omega = RADPS_TO_RPM * chassis.motors[2].target_omega;
-      // vofa_motor2_now_omega    = RADPS_TO_RPM * chassis.motors[2].now_omega;
-      world_x = chassis.world_x;
-      world_y = chassis.world_y;
-      world_w = chassis.world_w;
+      vofa_motor0_target_omega = chassis.motors[0].target_omega;
+      vofa_motor0_now_omega    = chassis.motors[0].now_omega;
+      world_x = chassis.motors[0].out;
+      vofa_motor1_target_omega = chassis.motors[1].target_omega;
+      vofa_motor1_now_omega    = chassis.motors[1].now_omega;
+      world_y = chassis.motors[1].out;
+      vofa_motor2_target_omega = chassis.motors[2].target_omega;
+      vofa_motor2_now_omega    = chassis.motors[2].now_omega;
+      world_w = chassis.motors[2].out;
+
+      vofa_buffer1 = chassis.motors[0].pid_omega.ff_out;
+      vofa_buffer2 = chassis.motors[0].pid_omega.i_out;
+
       vofa_chassis_target_speed_x = chassis.target_speed_x;
       vofa_chassis_target_speed_y = chassis.target_speed_y;
       vofa_chassis_target_speed_w = chassis.target_speed_w;

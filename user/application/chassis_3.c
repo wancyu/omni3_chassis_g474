@@ -39,8 +39,6 @@ void chassis_init(chassis_struct *chassis)
     /* ----------------- 2. 外环位置环 (输入: m/rad -> 输出: m/s, rad/s) ----------------- */
     // 平移位置外环 (X/Y)
 
-
-
     pid_init(&chassis->pid_x, 5.0f, 0.0f, 0.10f, 0.0f, 1.0f, 0.001f); // 最大输出 1.5 m/s
     pid_init(&chassis->pid_y, 5.0f, 0.0f, 0.10f, 0.0f, 1.0f, 0.001f); // 最大横移 1.5 m/s
     pid_init(&chassis->pid_w, 4.0f, 0.0f, 0.10f, 0.0f, 3.14f, 0.001f); // 最大自转 3.14 rad/s
@@ -69,13 +67,20 @@ void chassis_init(chassis_struct *chassis)
 
         // 电机内环转速 PID (rad/s 误差 -> C610 控制电流)
         pid_init(&chassis->motors[i].pid_omega,
-                 1600.0f,   // Kp: 响应刚度
-                 300.0f,    // Ki: 克服静态摩擦
+                 400.0f,   // Kp: 响应刚度
+                 200.0f,    // Ki: 克服静态摩擦
                  0.0f,      // Kd: 速度环通常给 0
                  3000.0f,   // MAX_I: 积分限幅
                  10000.0f,  // MAX_OUT: 满幅输出
                  0.001f);
     }
+    pid_set_kv(&chassis->motors[0].pid_omega,18);
+    pid_set_kv(&chassis->motors[1].pid_omega,13);
+    pid_set_kv(&chassis->motors[2].pid_omega,9);
+
+    pid_set_friction_comp(&chassis->motors[0].pid_omega,225);
+    pid_set_friction_comp(&chassis->motors[1].pid_omega,160);
+    pid_set_friction_comp(&chassis->motors[2].pid_omega,210);
 }
 
 
@@ -133,7 +138,7 @@ void chassis_heading_controller_update(chassis_struct *chassis)
         chassis->target_speed_w = chassis->cmd_vw;
         // 同步积分器，避免后续切入闭环时出现大步跃变
         chassis->integrated_target_w = chassis->world_w;
-        chassis->pid_w.integral = 0.0f;
+        chassis->pid_w.i_out = 0.0f;
         return;
     }
 
