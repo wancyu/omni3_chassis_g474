@@ -12,18 +12,12 @@
 #include "dvc_lidar.h"
 vofa_struct vofa_debug;
 
-static float vofa_motor0_target_omega;
-static float vofa_motor0_now_omega;
-static float vofa_motor1_target_omega;
-static float vofa_motor1_now_omega;
-static float vofa_motor2_target_omega;
-static float vofa_motor2_now_omega;
-static float vofa_chassis_target_speed_x;
-static float vofa_chassis_target_speed_y;
-static float vofa_chassis_target_speed_w;
 static float vofa_buffer1;
 static float vofa_buffer2;
 static float vofa_buffer3;
+static float vofa_buffer4;
+static float vofa_buffer5;
+static float vofa_buffer6;
 
 
 vofa_cmd_struct vofa_cmd = {
@@ -32,11 +26,6 @@ vofa_cmd_struct vofa_cmd = {
     .last_update_time = 0,
     .is_new_cmd = 0
 };
-
-static float world_x;
-static float world_y;
-static float world_w;
-
 
 
 const char *vofa_cmd_list[] = {
@@ -51,6 +40,11 @@ const char *vofa_cmd_list[] = {
     "chassis_pose", //8
     "reset_pose"   //9
 };
+
+static uint8_t cur_motor_id = 1; //
+
+
+
 void uart_callback_function(uint8_t *Buffer, uint16_t Length)
 {
     if (Buffer == NULL || Length == 0) return;
@@ -110,6 +104,27 @@ void uart_callback_function(uint8_t *Buffer, uint16_t Length)
     const int32_t cmd_index = vofa_get_variable_index(&vofa_debug);
     const float   cmd_value = vofa_get_variable_value(&vofa_debug);
 
+    if (cmd_index == 0) { // 切换电机 ID
+        cur_motor_id = (uint8_t)cmd_value;
+        return;
+    }
+
+
+    if (cmd_index == 1) // 收到 kp 切换指令
+    {
+        if      (cur_motor_id == 0) pid_set_kp(&chassis.pid_x, cmd_value);
+        else if (cur_motor_id == 1) pid_set_kp(&chassis.pid_y, cmd_value);
+        else if (cur_motor_id == 2) pid_set_kp(&chassis.pid_w, cmd_value);
+        else if (cur_motor_id == 3)
+        {
+            pid_set_kp(&chassis.motors[0].pid_omega, cmd_value);
+            pid_set_kp(&chassis.motors[1].pid_omega, cmd_value);
+            pid_set_kp(&chassis.motors[2].pid_omega, cmd_value);
+        }
+
+        return;
+    }
+
     if (cmd_index == 7) // 收到 ctrl_mode 切换指令
     {
         uint8_t mode = (uint8_t)cmd_value;
@@ -143,9 +158,8 @@ void vofa_task(void *argument)
   vofa_init(&vofa_debug, &uart1_manage_object, (sizeof(vofa_cmd_list) / sizeof(char *)), vofa_cmd_list, 0x7F800000);
 
 
-  vofa_set_data(&vofa_debug, 9, &vofa_motor0_target_omega ,&vofa_motor0_now_omega, &world_x,
-                                       &vofa_buffer1 ,&vofa_buffer2, &world_y,
-                                       &vofa_motor2_target_omega ,&vofa_motor2_now_omega, &world_w
+  vofa_set_data(&vofa_debug, 6, &vofa_buffer1 ,&vofa_buffer2, &vofa_buffer3,
+                                       &vofa_buffer4 ,&vofa_buffer5, &vofa_buffer6
                                        );
 
 
@@ -155,23 +169,34 @@ void vofa_task(void *argument)
       tick_count += 100;
       osDelayUntil(tick_count);
 
+      // vofa_buffer1 = chassis.motors[0].pid_omega.ff_out;
+      // vofa_buffer2 = chassis.motors[0].pid_omega.i_out;
+      // vofa_buffer3 = chassis.motors[0].target_omega;
+      // vofa_buffer4    = chassis.motors[0].now_omega;
+      // vofa_buffer5 = chassis.motors[1].target_omega;
+      // vofa_buffer6    = chassis.motors[1].now_omega;
 
-      vofa_motor0_target_omega = chassis.motors[0].target_omega;
-      vofa_motor0_now_omega    = chassis.motors[0].now_omega;
-      world_x = chassis.motors[0].out;
-      vofa_motor1_target_omega = chassis.motors[1].target_omega;
-      vofa_motor1_now_omega    = chassis.motors[1].now_omega;
-      world_y = chassis.motors[1].out;
-      vofa_motor2_target_omega = chassis.motors[2].target_omega;
-      vofa_motor2_now_omega    = chassis.motors[2].now_omega;
-      world_w = chassis.motors[2].out;
+      // vofa_buffer1 = chassis.motors[0].target_omega;
+      // vofa_buffer2    = chassis.motors[0].now_omega;
+      // vofa_buffer3 = chassis.motors[1].target_omega;
+      // vofa_buffer4    = chassis.motors[1].now_omega;
+      // vofa_buffer5 = chassis.motors[2].target_omega;
+      // vofa_buffer6    = chassis.motors[2].now_omega;
 
-      vofa_buffer1 = chassis.motors[0].pid_omega.ff_out;
-      vofa_buffer2 = chassis.motors[0].pid_omega.i_out;
+      // vofa_buffer1 = chassis.target_speed_x;
+      // vofa_buffer2 = chassis.target_speed_y;
+      // vofa_buffer3 = chassis.target_speed_w;
+      // vofa_buffer4 = chassis.world_x;
+      // vofa_buffer5 = chassis.world_y;
+      // vofa_buffer6 = chassis.world_w;
 
-      vofa_chassis_target_speed_x = chassis.target_speed_x;
-      vofa_chassis_target_speed_y = chassis.target_speed_y;
-      vofa_chassis_target_speed_w = chassis.target_speed_w;
+      vofa_buffer1 = chassis.target_speed_x;
+      vofa_buffer2 = chassis.target_speed_y;
+      vofa_buffer3 = chassis.target_speed_w;
+      vofa_buffer4 = chassis.world_x;
+      vofa_buffer5 = chassis.world_y;
+      vofa_buffer6 = chassis.world_w;
+
 
       // 调用发送函数
       vofa_update_and_send(&vofa_debug);

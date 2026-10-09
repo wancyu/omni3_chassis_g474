@@ -39,14 +39,10 @@ void chassis_init(chassis_struct *chassis)
     /* ----------------- 2. 外环位置环 (输入: m/rad -> 输出: m/s, rad/s) ----------------- */
     // 平移位置外环 (X/Y)
 
-    pid_init(&chassis->pid_x, 5.0f, 0.0f, 0.10f, 0.0f, 1.0f, 0.001f); // 最大输出 1.5 m/s
-    pid_init(&chassis->pid_y, 5.0f, 0.0f, 0.10f, 0.0f, 1.0f, 0.001f); // 最大横移 1.5 m/s
-    pid_init(&chassis->pid_w, 4.0f, 0.0f, 0.10f, 0.0f, 3.14f, 0.001f); // 最大自转 3.14 rad/s
+    pid_init(&chassis->pid_x, 6.0f, 0.0f, 0.0f, 0.0f, 1.2f, 0.005f);
+    pid_init(&chassis->pid_y, 4.0f, 0.0f, 0.0f, 0.0f, 1.2f, 0.005f);
+    pid_init(&chassis->pid_w, 4.0f, 0.0f, 0.0f, 0.0f, 6.0f, 0.005f);
 
-    // pid_init(&chassis->pid_x, 4.00f, 0.00f, 0.20f, 0.00f, 1.50f, 0.001f);
-    // pid_init(&chassis->pid_y, 4.00f, 0.00f, 0.20f, 0.00f, 1.50f, 0.001f);
-    //
-    // // Yaw 航向外环 (自转与锁头共用)
     // pid_init(&chassis->pid_w, 4.00f, 0.00f, 0.50f, 0.00f, 6.0f, 0.001f);
 
     /* ----------------- 3. 子电机与内环速度 PID 配置 ----------------- */
@@ -67,20 +63,24 @@ void chassis_init(chassis_struct *chassis)
 
         // 电机内环转速 PID (rad/s 误差 -> C610 控制电流)
         pid_init(&chassis->motors[i].pid_omega,
-                 400.0f,   // Kp: 响应刚度
+                 2000.0f,   // Kp: 响应刚度
                  200.0f,    // Ki: 克服静态摩擦
                  0.0f,      // Kd: 速度环通常给 0
                  3000.0f,   // MAX_I: 积分限幅
                  10000.0f,  // MAX_OUT: 满幅输出
                  0.001f);
     }
-    pid_set_kv(&chassis->motors[0].pid_omega,18);
-    pid_set_kv(&chassis->motors[1].pid_omega,13);
-    pid_set_kv(&chassis->motors[2].pid_omega,9);
+    pid_set_deadband(&chassis->motors[0].pid_angle,0.001f);
+    pid_set_deadband(&chassis->motors[1].pid_angle,0.001f);
+    pid_set_deadband(&chassis->motors[2].pid_angle,0.001f);
 
-    pid_set_friction_comp(&chassis->motors[0].pid_omega,225);
-    pid_set_friction_comp(&chassis->motors[1].pid_omega,160);
-    pid_set_friction_comp(&chassis->motors[2].pid_omega,210);
+    pid_set_kv(&chassis->motors[0].pid_omega,13);
+    pid_set_kv(&chassis->motors[1].pid_omega,13);
+    pid_set_kv(&chassis->motors[2].pid_omega,13);
+
+    pid_set_friction_comp(&chassis->motors[0].pid_omega,200);
+    pid_set_friction_comp(&chassis->motors[1].pid_omega,200);
+    pid_set_friction_comp(&chassis->motors[2].pid_omega,200);
 }
 
 

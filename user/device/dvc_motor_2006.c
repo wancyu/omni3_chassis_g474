@@ -83,7 +83,7 @@ void motor_2006_init(motor_2006_struct *motor,
 
     motor->fdcan_tx_data         = motor_2006_allocate_tx_data(fdcan_manager, fdcan_id);
 
-    motor->max_acceleration      = 60.0f;
+    motor->max_acceleration      = 0.0f;
     motor->target_user_omega     = 0.0f;
     motor->target_omega          = 0.0f;
     motor->target_angle          = 0.0f;
